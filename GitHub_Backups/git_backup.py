@@ -14,7 +14,7 @@ import json
 
 class git_backup(plugins.Plugin):
     __author__ = 'WPA2'
-    __version__ = '2.1.0'
+    __version__ = '2.1.0.1'
     __license__ = 'GPL3'
     __description__ = 'Simple Git backup for Pwnagotchi - mirrors files to GitHub with auto-restore script'
 
@@ -82,6 +82,7 @@ class git_backup(plugins.Plugin):
         self.interval = self.options.get('interval', 2) * 3600  # hours -> seconds (default 2 hours)
         self.extra_files = self.options.get('extra_files', [])
         self.ssh_key = self.options.get('ssh_key', '/home/pi/.ssh/id_rsa')
+        self.show_status = self.options.get('show_status', True)
 
         # Validate SSH key exists
         if not os.path.exists(self.ssh_key):
@@ -93,19 +94,21 @@ class git_backup(plugins.Plugin):
         logging.info(f"[git-backup] Ready - interval: {self.options.get('interval', 2)}h, repo: {self.github_repo}")
 
     def on_ui_setup(self, ui):
-        with ui._lock:
-            ui.add_element('git_backup', LabeledValue(
-                color=BLACK,
-                label='B',
-                value='---',
-                position=(ui.width() - 35, 0),
-                label_font=fonts.Small,
-                text_font=fonts.Small
-            ))
+        if self.show_status:
+            with ui._lock:
+                ui.add_element('git_backup', LabeledValue(
+                    color=BLACK,
+                    label='B',
+                    value='---',
+                    position=(ui.width() - 25, 0),
+                    label_font=fonts.Small,
+                    text_font=fonts.Small
+                ))
 
     def on_ui_update(self, ui):
-        with ui._lock:
-            ui.set('git_backup', self.ui_status)
+        if self.show_status:
+            with ui._lock:
+                ui.set('git_backup', self.ui_status)
 
     def on_internet_available(self, agent):
         if not self.ready:
@@ -127,6 +130,17 @@ class git_backup(plugins.Plugin):
 
         logging.info("[git-backup] Internet available, starting backup...")
         self._perform_backup()
+
+    # called before the plugin is unloaded
+    def on_unload(self, ui):
+        if self.show_status:
+            try:
+                # remove UI elements
+                with ui._lock:
+                    ui.remove_element("git_status")
+                
+            except Exception as e:
+                logging.warning("Unload: %s" % e)
 
     def _git_env(self):
         """Environment variables for git with SSH key"""
